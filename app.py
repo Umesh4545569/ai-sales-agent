@@ -2,11 +2,12 @@ import streamlit as st
 import google.generativeai as genai
 import requests
 from bs4 import BeautifulSoup
+import time
 
 st.set_page_config(page_title="AI Agent Pro", page_icon="🚀")
 st.title("🚀 Professional AI Sales Agent")
 
-# 1. Secure API Key Loading
+# Secure API Key Loading
 if "GEMINI_API_KEY" in st.secrets:
     api_key = st.secrets["GEMINI_API_KEY"]
 else:
@@ -32,32 +33,26 @@ with st.form("agent_form"):
 
 if submit:
     if not api_key:
-        st.error("❌ API Key not found. Please add GEMINI_API_KEY to Streamlit Secrets.")
+        st.error("❌ Please configure your API Key.")
     else:
-        with st.spinner('AI is researching and selecting best model...'):
+        with st.spinner('AI is researching...'):
             try:
                 genai.configure(api_key=api_key)
+                # Forced to use 'gemini-1.5-flash' for highest free-tier limits
+                model = genai.GenerativeModel('gemini-1.5-flash')
                 
-                # 2. AUTO-DETECT WORKING MODEL
-                available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-                
-                # Try to find Flash first, then Pro
-                model_to_use = "models/gemini-1.5-flash" # Default
-                if any("gemini-1.5-flash" in m for m in available_models):
-                    model_to_use = [m for m in available_models if "gemini-1.5-flash" in m][0]
-                elif any("gemini-pro" in m for m in available_models):
-                    model_to_use = [m for m in available_models if "gemini-pro" in m][0]
-
                 data = scrape_website(url)
                 if data:
-                    prompt = f"Write a professional 3-sentence sales email for {company} selling {service}. Use this data: {data}. Focus on ROI."
-                    model = genai.GenerativeModel(model_to_use)
+                    prompt = f"Analyze this data: {data}. Write a 3-sentence sales email for {company} selling {service}. Focus on how they save money."
                     response = model.generate_content(prompt)
                     
-                    st.success(f"✅ Success! (Using {model_to_use})")
+                    st.success("✅ Success!")
                     st.markdown("### Your Personalized Pitch:")
                     st.info(response.text)
                 else:
-                    st.error("Could not read website. Ensure URL is correct.")
+                    st.error("Could not read website. Try again.")
             except Exception as e:
-                st.error(f"Technical Error: {e}")
+                if "429" in str(e):
+                    st.error("Too many requests! Please wait 60 seconds and try again. This is a limit of the Free Tier.")
+                else:
+                    st.error(f"Technical Error: {e}")
