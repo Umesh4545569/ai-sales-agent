@@ -3,10 +3,11 @@ import google.generativeai as genai
 import requests
 from bs4 import BeautifulSoup
 
-st.set_page_config(page_title="AI Agent Pro", page_icon="🚀")
-st.title("🚀 Professional AI Sales Agent")
+# CHANGE THE NAME HERE
+st.set_page_config(page_title="AgenticSales", page_icon="🚀")
+st.title("🚀 AgenticSales: Autonomous Sales SDR")
+st.subheader("High-performance AI agents for Logistics & SaaS")
 
-# Secure API Key Loading
 if "GEMINI_API_KEY" in st.secrets:
     api_key = st.secrets["GEMINI_API_KEY"]
 else:
@@ -32,37 +33,22 @@ with st.form("agent_form"):
 
 if submit:
     if not api_key:
-        st.error("❌ API Key not found. Please add it to Secrets or Sidebar.")
+        st.error("❌ API Key not found.")
     else:
-        with st.spinner('Connecting to your AI engine...'):
+        with st.spinner('AgenticSales is researching the target...'):
             try:
                 genai.configure(api_key=api_key)
-                
-                # DYNAMIC DISCOVERY: Ask Google what models you have
                 models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+                model_name = [m for m in models if "1.5-flash" in m][0] if any("1.5-flash" in m for m in models) else models[0]
                 
-                # Pick the best one (prefer 1.5-flash for speed)
-                model_name = ""
-                for m in models:
-                    if "1.5-flash" in m:
-                        model_name = m
-                        break
-                if not model_name:
-                    model_name = models[0] # Fallback to first available
-
                 data = scrape_website(url)
                 if data:
-                    prompt = f"Analyze this data: {data}. Write a 3-sentence sales email for {company} selling {service}."
+                    prompt = f"Analyze website data: {data}. Write a 3-sentence high-conversion sales email for {company} selling {service}. Focus on ROI and efficiency."
                     model = genai.GenerativeModel(model_name)
                     response = model.generate_content(prompt)
-                    
-                    st.success(f"✅ Success! Generated using {model_name}")
-                    st.markdown("### Your Personalized Pitch:")
+                    st.success("✅ Success!")
                     st.info(response.text)
                 else:
-                    st.error("Could not read website. Check the URL.")
+                    st.error("Could not read website.")
             except Exception as e:
-                if "429" in str(e):
-                    st.error("Quota Exceeded! Wait 60 seconds. (Free Tier limit)")
-                else:
-                    st.error(f"Error: {e}")
+                st.error(f"Error: {e}")
