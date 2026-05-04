@@ -5,7 +5,6 @@ import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
 from fpdf import FPDF
-import time
 
 # --- 1. PRO UI THEME ---
 st.set_page_config(page_title="SalesPilot AI Pro", page_icon="🚀", layout="wide")
@@ -16,27 +15,29 @@ gemini_keys = st.secrets.get("GEMINI_KEYS", [])
 groq_key = st.secrets.get("GROQ_API_KEY", "")
 
 def generate_with_groq(prompt):
-    if not groq_key: return None
+    if not groq_key: return None, "Groq Key missing in secrets"
     try:
         client = Groq(api_key=groq_key)
-        # Using Llama 3.1 8B for maximum speed/RPM
+        # Trying a highly available model
         completion = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model="llama3-8b-8192",
             messages=[{"role": "user", "content": prompt}]
         )
-        return completion.choices[0].message.content, "Groq LPU Engine (Ultra-Fast)"
+        return completion.choices[0].message.content, "Groq LPU Engine"
     except Exception as e:
-        return None, str(e)
+        return None, f"Groq Error: {str(e)}"
 
 def generate_with_gemini(prompt):
-    for key in gemini_keys:
+    if not gemini_keys: return None, "Gemini Keys missing"
+    for i, key in enumerate(gemini_keys):
         try:
             genai.configure(api_key=key.strip())
             model = genai.GenerativeModel('gemini-1.5-flash')
             response = model.generate_content(prompt)
-            return response.text, "Google Gemini Engine"
-        except: continue
-    return None, "All Gemini Slots Busy"
+            return response.text, f"Gemini Slot {i+1}"
+        except Exception as e:
+            continue
+    return None, "All Gemini keys failed or rate-limited"
 
 # --- 3. SCRAPING & PDF ---
 def scrape_website(url):
@@ -46,7 +47,7 @@ def scrape_website(url):
         soup = BeautifulSoup(response.text, 'html.parser')
         for s in soup(["script", "style"]): s.extract()
         return " ".join(soup.get_text().split())[:3000]
-    except: return "Data missing."
+    except: return "Data unavailable."
 
 def create_pdf(company, content):
     pdf = FPDF()
@@ -72,27 +73,30 @@ with col1:
         if st.session_state.pitch_count >= 3:
             st.error("Free limit reached. Upgrade to Pro!")
         else:
-            with st.spinner('Powering up Groq LPUs...'):
+            with st.spinner('Engaging Dual-Engine AI...'):
                 raw = scrape_website(url)
-                prompt = f"Write a 3-sentence sales email for {name} selling {prod} using this data: {raw}"
+                prompt = f"Analyze {raw}. Write a 3-sentence sales email for {name} selling {prod}."
                 
-                # TRY GROQ FIRST (Faster & more stable)
-                res, status = generate_with_groq(prompt)
+                # TRY GROQ
+                res, groq_status = generate_with_groq(prompt)
                 
-                # FALLBACK TO GEMINI
                 if not res:
-                    st.info("Groq busy, switching to backup (Gemini)...")
-                    res, status = generate_with_gemini(prompt)
+                    st.warning(f"⚠️ {groq_status}")
+                    st.info("Switching to backup Gemini Engine...")
+                    res, gemini_status = generate_with_gemini(prompt)
+                    status = gemini_status
+                else:
+                    status = groq_status
                 
                 if res:
                     st.session_state.pitch_count += 1
                     st.session_state.res, st.session_state.status, st.session_state.name = res, status, name
                 else:
-                    st.error("🚨 GLOBAL OUTAGE: Both AI engines are at capacity. Wait 60s.")
+                    st.error("🚨 CRITICAL: Both AI Providers failed. See warnings above for details.")
 
 with col2:
     if 'res' in st.session_state:
-        st.success(f"✅ {st.session_state.status}")
+        st.success(f"✅ Active: {st.session_state.status}")
         st.code(st.session_state.res)
         pdf_data = create_pdf(st.session_state.name, st.session_state.res)
         st.download_button("📄 Download PDF Report", pdf_data, "report.pdf")
