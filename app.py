@@ -18,12 +18,12 @@ def generate_with_groq(prompt):
     if not groq_key: return None, "Groq Key missing in secrets"
     try:
         client = Groq(api_key=groq_key)
-        # Trying a highly available model
+        # UPDATED: Using Llama 3.1 8B (Fastest & currently active)
         completion = client.chat.completions.create(
-            model="llama3-8b-8192",
+            model="llama-3.1-8b-instant",
             messages=[{"role": "user", "content": prompt}]
         )
-        return completion.choices[0].message.content, "Groq LPU Engine"
+        return completion.choices[0].message.content, "Groq LPU Engine (Ultra-Fast)"
     except Exception as e:
         return None, f"Groq Error: {str(e)}"
 
@@ -35,9 +35,9 @@ def generate_with_gemini(prompt):
             model = genai.GenerativeModel('gemini-1.5-flash')
             response = model.generate_content(prompt)
             return response.text, f"Gemini Slot {i+1}"
-        except Exception as e:
+        except Exception:
             continue
-    return None, "All Gemini keys failed or rate-limited"
+    return None, "All Gemini keys throttled."
 
 # --- 3. SCRAPING & PDF ---
 def scrape_website(url):
@@ -55,6 +55,7 @@ def create_pdf(company, content):
     pdf.set_font("Arial", size=12)
     pdf.cell(200, 10, f"Strategic Report: {company}", ln=True, align='C')
     pdf.ln(10)
+    # Filter for PDF safety
     safe_text = content.encode('ascii', 'ignore').decode('ascii')
     pdf.multi_cell(0, 10, safe_text)
     return pdf.output(dest='S')
@@ -62,7 +63,7 @@ def create_pdf(company, content):
 # --- 4. APP INTERFACE ---
 if 'pitch_count' not in st.session_state: st.session_state.pitch_count = 0
 
-st.title("🚀 SalesPilot AI: Dual-Engine Pro")
+st.title("🚀 SalesPilot AI: v2.3 High-Uptime")
 col1, col2 = st.columns([1, 1.5])
 
 with col1:
@@ -73,26 +74,25 @@ with col1:
         if st.session_state.pitch_count >= 3:
             st.error("Free limit reached. Upgrade to Pro!")
         else:
-            with st.spinner('Engaging Dual-Engine AI...'):
+            with st.spinner('Engaging High-Speed LPUs...'):
                 raw = scrape_website(url)
                 prompt = f"Analyze {raw}. Write a 3-sentence sales email for {name} selling {prod}."
                 
-                # TRY GROQ
-                res, groq_status = generate_with_groq(prompt)
+                # TRY GROQ FIRST
+                res, g_status = generate_with_groq(prompt)
                 
                 if not res:
-                    st.warning(f"⚠️ {groq_status}")
-                    st.info("Switching to backup Gemini Engine...")
-                    res, gemini_status = generate_with_gemini(prompt)
-                    status = gemini_status
+                    st.warning(f"Groq primary engine unavailable. Trying backup...")
+                    res, gem_status = generate_with_gemini(prompt)
+                    status = gem_status
                 else:
-                    status = groq_status
+                    status = g_status
                 
                 if res:
                     st.session_state.pitch_count += 1
                     st.session_state.res, st.session_state.status, st.session_state.name = res, status, name
                 else:
-                    st.error("🚨 CRITICAL: Both AI Providers failed. See warnings above for details.")
+                    st.error("🚨 Both AI providers are currently rate-limited. Please wait 2 minutes.")
 
 with col2:
     if 'res' in st.session_state:
