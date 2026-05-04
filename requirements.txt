@@ -1,5 +1,6 @@
 streamlit
 google-generativeai
+groq
 requests
 beautifulsoup4
 fpdf2
