@@ -3,33 +3,30 @@ import google.generativeai as genai
 import requests
 from bs4 import BeautifulSoup
 
-# --- 1. PRO THEME & UI ---
+# --- 1. PRO UI THEME ---
 st.set_page_config(page_title="SalesPilot AI", page_icon="🚀", layout="wide")
 
 st.markdown("""
 <style>
     .main { background-color: #0a0a0a; color: #ffffff; }
-    .stTextInput>div>div>input { background-color: #1a1a1a; color: white; border-radius: 8px; }
-    .stButton>button { 
-        background: linear-gradient(90deg, #6366f1 0%, #a855f7 100%); 
-        color: white; border: none; border-radius: 8px; padding: 0.7rem 2rem; width: 100%;
-        font-weight: bold;
+    .stTextInput>div>div>input, .stTextArea>div>div>textarea { background-color: #1a1a1a; color: white; border-radius: 8px; }
+    
+    /* Button Styling */
+    .normal-btn button { background-color: #4b5563 !important; color: white !important; border-radius: 8px !important; }
+    .pro-btn button { background: linear-gradient(90deg, #6366f1 0%, #a855f7 100%) !important; color: white !important; border-radius: 8px !important; }
+    .sub-btn a { 
+        background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%) !important; 
+        color: white !important; padding: 10px 20px; text-decoration: none; border-radius: 8px;
+        display: block; text-align: center; font-weight: bold; margin-top: 10px;
     }
-    .stExpander { background-color: #111; border: 1px solid #333; border-radius: 10px; }
     footer {visibility: hidden;}
-    .stTabs [data-baseweb="tab-list"] { background-color: transparent; }
-    .stTabs [data-baseweb="tab"] { color: #888; }
-    .stTabs [aria-selected="true"] { color: #6366f1 !important; border-bottom-color: #6366f1 !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. LOGIC & LIMITS ---
-if 'pitch_count' not in st.session_state:
-    st.session_state.pitch_count = 0
-if 'authenticated' not in st.session_state:
-    st.session_state.authenticated = False
+# --- 2. LOGIC & STATE ---
+if 'pitch_count' not in st.session_state: st.session_state.pitch_count = 0
+if 'authenticated' not in st.session_state: st.session_state.authenticated = False
 
-# API Key from Secrets
 api_key = st.secrets.get("GEMINI_API_KEY")
 
 def scrape_website(url):
@@ -41,79 +38,65 @@ def scrape_website(url):
         return " ".join(soup.get_text().split())[:3000]
     except: return None
 
-# --- 3. AUTH & EMAIL GATE ---
+# --- 3. AUTH GATE ---
 if not st.session_state.authenticated:
     st.title("🚀 SalesPilot AI")
-    st.write("The Enterprise AI Sales SDR. Turn URLs into high-conversion revenue.")
-    email = st.text_input("Enter business email to access free credits")
-    if st.button("Start Building Pitches"):
+    email = st.text_input("Enter business email to start")
+    if st.button("Access Free Credits"):
         if "@" in email:
             st.session_state.authenticated = True
             st.rerun()
-        else:
-            st.error("Please enter a valid email.")
     st.stop()
 
-# --- 4. PAYWALL (LEMON SQUEEZY) ---
-if st.session_state.pitch_count >= 3:
-    st.title("⚡ Limit Reached")
-    st.warning("You've used your 3 free daily pitches.")
-    st.markdown("### Upgrade to SalesPilot Pro for unlimited pitches.")
-    st.link_button("🚀 Upgrade to Pro ($9/mo)", "https://salespilotai.lemonsqueezy.com/checkout/buy/5a3cf1a7-0418-4e8b-b389-a1a57621f28d")
-    st.stop()
-
-# --- 5. MAIN INTERFACE ---
+# --- 4. MAIN INTERFACE ---
 st.title("🚀 SalesPilot AI")
-st.caption(f"Status: Pro Simulation | Free Credits: {3 - st.session_state.pitch_count} left")
+st.caption(f"Credits Used: {st.session_state.pitch_count}/3")
 
 col1, col2 = st.columns([1, 1.5])
 
 with col1:
-    st.markdown("### Target Research")
-    company = st.text_input("Company Name (e.g. Zomato)")
-    url = st.text_input("Website URL (https://...)")
-    service = st.text_area("What are you selling?", placeholder="e.g. Logistics software...")
-    gen_btn = st.button("Generate Pro Pitch Suite")
+    st.markdown("### Target Input")
+    company = st.text_input("Company Name")
+    url = st.text_input("Website URL")
+    service = st.text_area("What are you selling?")
+    
+    st.markdown("---")
+    # THE THREE BUTTONS
+    st.markdown('<div class="normal-btn">', unsafe_allow_html=True)
+    normal_gen = st.button("Generate Normal Pitch (Free)")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="pro-btn">', unsafe_allow_html=True)
+    pro_gen = st.button("✨ Generate Full Pro Suite")
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    st.markdown(f'<a href="https://salespilotai.lemonsqueezy.com/checkout/buy/5a3cf1a7-0418-4e8b-b389-a1a57621f28d" class="sub-btn">💳 Subscribe to Unlimited Pro ($9/mo)</a>', unsafe_allow_html=True)
 
 with col2:
-    if gen_btn:
-        if not company or not url:
-            st.error("Please provide both company name and URL.")
-        else:
-            with st.spinner('Scraping Intel & Detecting AI Engine...'):
-                try:
-                    genai.configure(api_key=api_key)
-                    
-                    # DYNAMIC MODEL DISCOVERY (FIXES THE 404 ERROR)
-                    models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-                    model_name = next((m for m in models if "1.5-flash" in m), models[0])
-                    
-                    data = scrape_website(url)
-                    if data:
-                        prompt = f"""
-                        Analyze data: {data}. Target: {company}. Service: {service}.
-                        Create:
-                        1. Pain Points: Identify 3.
-                        2. Email: Catchy subject + 3 sentence body.
-                        3. LinkedIn: Short DM (200 chars).
-                        4. WhatsApp: Direct casual message.
-                        """
-                        model = genai.GenerativeModel(model_name)
-                        response = model.generate_content(prompt).text
-                        
-                        st.session_state.pitch_count += 1
-                        
-                        st.success(f"✅ Success! (Engine: {model_name})")
-                        tabs = st.tabs(["📧 Email", "💬 LinkedIn", "📱 WhatsApp", "🔍 Full Analysis"])
-                        with tabs[0]: st.code(response)
-                        with tabs[1]: st.info("Copy this for LinkedIn InMail")
-                        with tabs[3]: st.write(response)
-                        
-                        st.download_button("Download Suite (.txt)", response, file_name=f"{company}_SalesPilot.txt")
-                    else:
-                        st.error("Scraping failed. Is the URL correct?")
-                except Exception as e:
-                    st.error(f"Engine Error: {e}")
+    # Handle Credits
+    if st.session_state.pitch_count >= 3 and (normal_gen or pro_gen):
+        st.error("⚡ Free limit reached. Please use the Subscription button to continue.")
+        st.stop()
 
-st.markdown("---")
-st.markdown("<center>Powered by SalesPilot AI | Targeted B2B Outreach at Scale</center>", unsafe_allow_html=True)
+    if normal_gen or pro_gen:
+        if not company or not url:
+            st.error("Missing company info.")
+        else:
+            with st.spinner('AI Agent is working...'):
+                genai.configure(api_key=api_key)
+                data = scrape_website(url)
+                if data:
+                    st.session_state.pitch_count += 1
+                    
+                    if normal_gen:
+                        prompt = f"Write a simple 3-line sales email for {company} selling {service} based on {data}."
+                        st.success("✅ Normal Pitch Ready")
+                    else:
+                        prompt = f"Analyze: {data}. Write: 1. Pain Points 2. Pro Email 3. LinkedIn DM 4. WhatsApp DM for {company} selling {service}."
+                        st.success("✨ Pro Suite Generated")
+                    
+                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    response = model.generate_content(prompt).text
+                    st.write(response)
+                else:
+                    st.error("Could not read website.")
