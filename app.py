@@ -2,7 +2,6 @@ import streamlit as st
 import google.generativeai as genai
 import requests
 from bs4 import BeautifulSoup
-import time
 
 st.set_page_config(page_title="AI Agent Pro", page_icon="🚀")
 st.title("🚀 Professional AI Sales Agent")
@@ -33,26 +32,37 @@ with st.form("agent_form"):
 
 if submit:
     if not api_key:
-        st.error("❌ Please configure your API Key.")
+        st.error("❌ API Key not found. Please add it to Secrets or Sidebar.")
     else:
-        with st.spinner('AI is researching...'):
+        with st.spinner('Connecting to your AI engine...'):
             try:
                 genai.configure(api_key=api_key)
-                # Forced to use 'gemini-1.5-flash' for highest free-tier limits
-                model = genai.GenerativeModel('gemini-1.5-flash')
                 
+                # DYNAMIC DISCOVERY: Ask Google what models you have
+                models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+                
+                # Pick the best one (prefer 1.5-flash for speed)
+                model_name = ""
+                for m in models:
+                    if "1.5-flash" in m:
+                        model_name = m
+                        break
+                if not model_name:
+                    model_name = models[0] # Fallback to first available
+
                 data = scrape_website(url)
                 if data:
-                    prompt = f"Analyze this data: {data}. Write a 3-sentence sales email for {company} selling {service}. Focus on how they save money."
+                    prompt = f"Analyze this data: {data}. Write a 3-sentence sales email for {company} selling {service}."
+                    model = genai.GenerativeModel(model_name)
                     response = model.generate_content(prompt)
                     
-                    st.success("✅ Success!")
+                    st.success(f"✅ Success! Generated using {model_name}")
                     st.markdown("### Your Personalized Pitch:")
                     st.info(response.text)
                 else:
-                    st.error("Could not read website. Try again.")
+                    st.error("Could not read website. Check the URL.")
             except Exception as e:
                 if "429" in str(e):
-                    st.error("Too many requests! Please wait 60 seconds and try again. This is a limit of the Free Tier.")
+                    st.error("Quota Exceeded! Wait 60 seconds. (Free Tier limit)")
                 else:
-                    st.error(f"Technical Error: {e}")
+                    st.error(f"Error: {e}")
