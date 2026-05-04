@@ -6,8 +6,7 @@ from bs4 import BeautifulSoup
 st.set_page_config(page_title="AI Agent Pro", page_icon="🚀")
 st.title("🚀 Professional AI Sales Agent")
 
-# Automatically get the API Key from Streamlit Secrets
-# If not found in secrets, it falls back to the sidebar (for safety)
+# 1. Secure API Key Loading
 if "GEMINI_API_KEY" in st.secrets:
     api_key = st.secrets["GEMINI_API_KEY"]
 else:
@@ -33,19 +32,32 @@ with st.form("agent_form"):
 
 if submit:
     if not api_key:
-        st.error("❌ API Key not configured!")
+        st.error("❌ API Key not found. Please add GEMINI_API_KEY to Streamlit Secrets.")
     else:
-        with st.spinner('AI Agent is researching...'):
+        with st.spinner('AI is researching and selecting best model...'):
             try:
                 genai.configure(api_key=api_key)
+                
+                # 2. AUTO-DETECT WORKING MODEL
+                available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+                
+                # Try to find Flash first, then Pro
+                model_to_use = "models/gemini-1.5-flash" # Default
+                if any("gemini-1.5-flash" in m for m in available_models):
+                    model_to_use = [m for m in available_models if "gemini-1.5-flash" in m][0]
+                elif any("gemini-pro" in m for m in available_models):
+                    model_to_use = [m for m in available_models if "gemini-pro" in m][0]
+
                 data = scrape_website(url)
                 if data:
-                    prompt = f"Write a 3-sentence sales email for {company} selling {service} based on this: {data}"
-                    model = genai.GenerativeModel('gemini-1.5-flash')
+                    prompt = f"Write a professional 3-sentence sales email for {company} selling {service}. Use this data: {data}. Focus on ROI."
+                    model = genai.GenerativeModel(model_to_use)
                     response = model.generate_content(prompt)
-                    st.success("✅ Analysis Complete!")
-                    st.write(response.text)
+                    
+                    st.success(f"✅ Success! (Using {model_to_use})")
+                    st.markdown("### Your Personalized Pitch:")
+                    st.info(response.text)
                 else:
-                    st.error("Could not read website.")
+                    st.error("Could not read website. Ensure URL is correct.")
             except Exception as e:
-                st.error(f"Error: {e}")
+                st.error(f"Technical Error: {e}")
