@@ -2,62 +2,46 @@ import streamlit as st
 import google.generativeai as genai
 import requests
 from bs4 import BeautifulSoup
-import random
+import time
 
-# --- 1. UI SETUP ---
+# --- 1. UI ---
 st.set_page_config(page_title="SalesPilot AI", page_icon="🚀", layout="wide")
-st.markdown("""
-<style>
-    .main { background-color: #0a0a0a; color: #ffffff; }
-    .stButton>button { background: linear-gradient(90deg, #6366f1 0%, #a855f7 100%); color: white; border-radius: 8px; width: 100%; font-weight: bold; }
-    .sub-btn a { background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%) !important; color: white !important; padding: 12px 20px; text-decoration: none; border-radius: 8px; display: block; text-align: center; font-weight: bold; }
-</style>
-""", unsafe_allow_html=True)
+st.markdown("<style>.main { background-color: #0a0a0a; color: white; }</style>", unsafe_allow_html=True)
 
-# --- 2. MULTI-KEY ROTATION LOGIC ---
-# Load the list of keys from secrets
+# --- 2. THE KEY FARM ---
 keys_list = st.secrets.get("GEMINI_KEYS", [])
-
-if 'pitch_count' not in st.session_state: st.session_state.pitch_count = 0
-if 'authenticated' not in st.session_state: st.session_state.authenticated = False
 
 def scrape_website(url):
     try:
         headers = {'User-Agent': 'Mozilla/5.0'}
         response = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(response.text, 'html.parser')
-        for script in soup(["script", "style"]): script.extract()
+        for s in soup(["script", "style"]): s.extract()
         return " ".join(soup.get_text().split())[:3000]
     except: return None
 
-# --- 3. THE "UNLIMITED" GENERATOR FUNCTION ---
-def generate_with_rotation(prompt):
-    # Try every key in your list until one works
+# --- 3. THE SMART ROTATOR ---
+def smart_generate(prompt):
+    models_to_try = ['gemini-1.5-flash', 'gemini-1.0-pro'] # Try both versions
+    
     for key in keys_list:
-        try:
-            genai.configure(api_key=key)
-            model = genai.GenerativeModel('gemini-1.5-flash')
-            response = model.generate_content(prompt)
-            return response.text, key # Success!
-        except Exception as e:
-            if "429" in str(e):
-                continue # Try the next key
-            else:
-                return f"Error: {e}", None
-    return "All API keys are currently exhausted. Please wait 60 seconds.", None
+        genai.configure(api_key=key)
+        for model_variant in models_to_try:
+            try:
+                model = genai.GenerativeModel(model_variant)
+                response = model.generate_content(prompt)
+                return response.text, f"{model_variant} (Key Active)"
+            except Exception as e:
+                if "429" in str(e):
+                    continue # Try next model or next key
+                else:
+                    pass 
+    return None, None
 
-# --- 4. APP INTERFACE ---
-if not st.session_state.authenticated:
-    st.title("🚀 SalesPilot AI")
-    email = st.text_input("Enter business email to start")
-    if st.button("Access Free Credits"):
-        if "@" in email:
-            st.session_state.authenticated = True
-            st.rerun()
-    st.stop()
+# --- 4. APP ---
+st.title("🚀 SalesPilot AI: High-Volume Engine")
 
-st.title("🚀 SalesPilot AI")
-st.caption(f"Status: High-Volume Engine Active | Credits Used: {st.session_state.pitch_count}/3")
+if 'pitch_count' not in st.session_state: st.session_state.pitch_count = 0
 
 col1, col2 = st.columns([1, 1.5])
 
@@ -65,31 +49,25 @@ with col1:
     company = st.text_input("Company Name")
     url = st.text_input("Website URL")
     service = st.text_area("What are you selling?")
-    
-    st.markdown("---")
-    pro_gen = st.button("✨ Generate Full Pro Suite")
-    st.markdown(f'<a href="https://salespilotai.lemonsqueezy.com/checkout/buy/5a3cf1a7-0418-4e8b-b389-a1a57621f28d" class="sub-btn">💳 Subscribe to Unlimited Pro ($9/mo)</a>', unsafe_allow_html=True)
+    gen_btn = st.button("✨ Generate Pro Pitch Suite")
+    st.markdown(f'<a href="https://salespilotai.lemonsqueezy.com/checkout/buy/5a3cf1a7-0418-4e8b-b389-a1a57621f28d" style="background:orange; color:white; padding:10px; border-radius:8px; text-decoration:none; display:block; text-align:center; font-weight:bold;">💳 Subscribe for Priority Servers ($9/mo)</a>', unsafe_allow_html=True)
 
 with col2:
-    if st.session_state.pitch_count >= 3 and pro_gen:
-        st.error("Free limit reached. Upgrade to Pro for business use.")
-        st.stop()
-
-    if pro_gen:
+    if gen_btn:
         if not company or not url:
-            st.error("Missing details.")
+            st.error("Enter details.")
         else:
-            with st.spinner('Rotating keys and researching...'):
+            with st.spinner('Scanning Engine Farm for available slot...'):
                 data = scrape_website(url)
                 if data:
-                    prompt = f"Analyze: {data}. Write a 3-sentence sales email and LinkedIn DM for {company} selling {service}."
-                    result, used_key = generate_with_rotation(prompt)
+                    prompt = f"Analyze: {data}. Write a 3-sentence sales email for {company} selling {service}."
+                    result, status = smart_generate(prompt)
                     
-                    if used_key:
+                    if result:
                         st.session_state.pitch_count += 1
-                        st.success("✅ Success!")
+                        st.success(f"✅ Success! Generated via {status}")
                         st.write(result)
                     else:
-                        st.warning(result) # Show the exhausted message
+                        st.error("🚨 ALL FREE SLOTS BUSY. Google is rate-limiting your IP. Please wait 60 seconds or Upgrade to Pro.")
                 else:
-                    st.error("Scrape failed.")
+                    st.error("Website unreachable.")
