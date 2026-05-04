@@ -3,9 +3,7 @@ import google.generativeai as genai
 from groq import Groq
 import requests
 from bs4 import BeautifulSoup
-from datetime import datetime
 from fpdf import FPDF
-import time
 
 # --- 1. PRO UI THEME ---
 st.set_page_config(page_title="SalesPilot AI Pro", page_icon="🚀", layout="wide")
@@ -23,7 +21,7 @@ def generate_with_groq(prompt):
             model="llama-3.1-8b-instant",
             messages=[{"role": "user", "content": prompt}]
         )
-        return completion.choices[0].message.content, "Groq LPU Engine (Ultra-Fast)"
+        return completion.choices[0].message.content, "Groq LPU Engine"
     except Exception as e:
         return None, str(e)
 
@@ -35,7 +33,7 @@ def generate_with_gemini(prompt):
             response = model.generate_content(prompt)
             return response.text, "Gemini Backup"
         except: continue
-    return None, "All Engines Throttled"
+    return None, "All Engines Busy"
 
 # --- 3. SCRAPING & PDF ---
 def scrape_website(url):
@@ -45,24 +43,25 @@ def scrape_website(url):
         soup = BeautifulSoup(response.text, 'html.parser')
         for s in soup(["script", "style"]): s.extract()
         return " ".join(soup.get_text().split())[:3000]
-    except: return "Data not available."
+    except: return "Company data unavailable."
 
 def create_pdf(company, content):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Helvetica", 'B', 16)
-    pdf.cell(0, 10, f"SALESPILOT AI REPORT: {company.upper()}", ln=True, align='C')
+    pdf.cell(0, 10, f"SALESPILOT AI: {company.upper()} REPORT", ln=True, align='C')
     pdf.ln(10)
     pdf.set_font("Helvetica", size=12)
-    # Clean text to avoid encoding errors
+    # Ensure text is compatible with Latin-1 encoding
     clean_text = content.encode('latin-1', 'replace').decode('latin-1')
     pdf.multi_cell(0, 10, clean_text)
-    return pdf.output()
+    # CRITICAL FIX: Convert output to bytes
+    return bytes(pdf.output())
 
 # --- 4. APP INTERFACE ---
 if 'pitch_count' not in st.session_state: st.session_state.pitch_count = 0
 
-st.title("🚀 SalesPilot AI: Enterprise v2.4")
+st.title("🚀 SalesPilot AI: Production v2.5")
 col1, col2 = st.columns([1, 1.5])
 
 with col1:
@@ -73,41 +72,39 @@ with col1:
         if st.session_state.pitch_count >= 3:
             st.error("Free limit reached. Upgrade to Pro!")
         elif not name or not url:
-            st.error("Please enter Name and URL.")
+            st.error("Enter details.")
         else:
-            with st.spinner('Engaging AI Engines...'):
+            with st.spinner('Thinking...'):
                 raw = scrape_website(url)
-                prompt = f"Write a professional sales email, LinkedIn DM, and WhatsApp message for {name} selling {prod} using this data: {raw}. Keep it high-conversion."
-                
+                prompt = f"Analyze {raw}. Write a professional email, LinkedIn DM, and WhatsApp for {name} selling {prod}."
                 res, status = generate_with_groq(prompt)
-                if not res:
-                    res, status = generate_with_gemini(prompt)
+                if not res: res, status = generate_with_gemini(prompt)
                 
                 if res:
                     st.session_state.pitch_count += 1
                     st.session_state.res, st.session_state.status, st.session_state.name = res, status, name
                 else:
-                    st.error("Engines busy. Please retry in 30s.")
+                    st.error("Out of credits. Please wait 60s.")
 
 with col2:
     if 'res' in st.session_state:
-        st.success(f"✅ {st.session_state.status}")
-        st.markdown("### Generated Outreach")
+        st.success(f"✅ Active: {st.session_state.status}")
+        st.markdown("### Strategic Outreach Suite")
         st.code(st.session_state.res, language=None)
         
-        # FIXED PDF DOWNLOAD LOGIC
+        # PDF DOWNLOAD
         try:
-            pdf_output = create_pdf(st.session_state.name, st.session_state.res)
+            pdf_bytes = create_pdf(st.session_state.name, st.session_state.res)
             st.download_button(
                 label="📄 Download PDF Report",
-                data=pdf_output,
+                data=pdf_bytes,
                 file_name=f"SalesPilot_{st.session_state.name}.pdf",
                 mime="application/pdf"
             )
         except Exception as e:
-            st.error(f"PDF Error: {e}")
+            st.error(f"PDF Logic Error: {e}")
         
         st.markdown("---")
         st.markdown(f'''<a href="https://salespilotai.lemonsqueezy.com/checkout/buy/5a3cf1a7-0418-4e8b-b389-a1a57621f28d" target="_blank">
-        <button style="background:orange; color:black; width:100%; height:50px; border-radius:10px; font-weight:bold; cursor:pointer;">
-        💳 Upgrade to Pro for Unlimited PDF Reports ($9/mo)</button></a>''', unsafe_allow_html=True)
+        <button style="background:linear-gradient(90deg, #f59e0b 0%, #d97706 100%); color:black; width:100%; height:50px; border-radius:10px; font-weight:bold; cursor:pointer; border:none;">
+        💳 Unlock Unlimited PDF Reports ($9/mo)</button></a>''', unsafe_allow_html=True)
