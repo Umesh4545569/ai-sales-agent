@@ -4,7 +4,6 @@ import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
 from fpdf import FPDF
-import time
 
 # --- 1. PRO UI THEME ---
 st.set_page_config(page_title="SalesPilot AI Pro", page_icon="🚀", layout="wide")
@@ -32,13 +31,12 @@ keys_list = st.secrets.get("GEMINI_KEYS", [])
 # --- 3. HELPER FUNCTIONS ---
 def scrape_website(url):
     try:
-        headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'}
+        headers = {'User-Agent': 'Mozilla/5.0'}
         response = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(response.text, 'html.parser')
         for s in soup(["script", "style"]): s.extract()
         return " ".join(soup.get_text().split())[:3000]
-    except Exception as e:
-        return f"Scrape Error: {str(e)}"
+    except: return "No data found."
 
 def create_pdf_data(company, content):
     pdf = FPDF()
@@ -52,27 +50,24 @@ def create_pdf_data(company, content):
 
 def smart_generate(prompt):
     if not keys_list:
-        return None, "Error: No API keys found in Secrets."
+        return None, "No API Keys found."
     
     for i, key in enumerate(keys_list):
         try:
-            genai.configure(api_key=key)
+            genai.configure(api_key=key.strip()) # strip() removes accidental spaces
             model = genai.GenerativeModel('gemini-1.5-flash')
             response = model.generate_content(prompt)
-            return response.text, f"Slot {i+1} Active"
+            return response.text, f"Key {i+1} Active"
         except Exception as e:
-            error_msg = str(e)
-            if "429" in error_msg:
-                continue # Try next key
-            else:
-                return None, f"Key Error: {error_msg}"
-    return None, "All free slots exhausted (429). Google is limiting this IP."
+            # If the key is invalid or rate-limited, try the next one
+            continue 
+            
+    return None, "All keys failed. Check if they are valid in Google AI Studio."
 
 # --- 4. AUTH GATE ---
 if not st.session_state.user_email:
     st.title("🚀 SalesPilot AI")
-    st.write("Generate winning B2B pitches in 10 seconds.")
-    email = st.text_input("Work Email Address", placeholder="name@company.com")
+    email = st.text_input("Work Email Address")
     if st.button("Start Free"):
         if "@" in email:
             st.session_state.user_email = email
@@ -83,13 +78,7 @@ if not st.session_state.user_email:
 with st.sidebar:
     st.title("📚 Dashboard")
     st.write(f"Credits: {3 - st.session_state.pitch_count}/3")
-    st.markdown(f'''<a href="https://salespilotai.lemonsqueezy.com/checkout/buy/5a3cf1a7-0418-4e8b-b389-a1a57621f28d" target="_blank">
-    <button style="background:#f59e0b; color:black; padding:12px; border:none; border-radius:8px; width:100%; font-weight:bold; cursor:pointer;">
-    💳 Subscribe Pro ($9/mo)</button></a>''', unsafe_allow_html=True)
-    st.markdown("---")
-    st.subheader("History")
-    for item in st.session_state.history[-5:]:
-        st.caption(f"🏢 {item['company']}")
+    st.link_button("🚀 Upgrade Pro ($9/mo)", "https://salespilotai.lemonsqueezy.com/checkout/buy/5a3cf1a7-0418-4e8b-b389-a1a57621f28d")
 
 # --- 6. MAIN APP ---
 st.title("🚀 Sales Generator")
@@ -97,45 +86,39 @@ st.title("🚀 Sales Generator")
 col_in, col_out = st.columns([1, 1.5])
 
 with col_in:
-    st.subheader("Target Details")
-    c_name = st.text_input("Target Company Name")
+    c_name = st.text_input("Company Name")
     c_url = st.text_input("Website (https://...)")
     c_prod = st.text_area("What are you selling?")
-    c_tone = st.selectbox("Tone", ["Professional", "Urgent", "Friendly"])
     
     if st.button("✨ Generate Full Suite"):
         if st.session_state.pitch_count >= 3:
-            st.error("Free limit reached. Upgrade to Pro!")
+            st.error("Free limit reached.")
         elif not c_name or not c_url:
             st.error("Fill all fields.")
         else:
-            with st.spinner('Scraping & Researching...'):
+            with st.spinner('Checking Key Farm...'):
                 raw_data = scrape_website(c_url)
-                prompt = f"Company: {c_name} | Info: {raw_data} | Sell: {c_prod} | Tone: {c_tone}. Generate Cold Email, LinkedIn DM, WhatsApp, Elevator Pitch, and 3 Pain Points."
-                full_pitch, model_status = smart_generate(prompt)
+                prompt = f"Write a 3-sentence sales email for {c_name} selling {c_prod} based on: {raw_data}"
+                full_pitch, status = smart_generate(prompt)
                 
                 if full_pitch:
                     st.session_state.pitch_count += 1
-                    st.session_state.current_model = model_status
+                    st.session_state.current_model = status
                     st.session_state.current_company = c_name
                     st.session_state.current_pitch = full_pitch
                     st.session_state.history.append({'company': c_name})
                 else:
-                    st.error(f"⚠️ {model_status}")
-                    st.info("💡 Pro Tip: Our Free Tier is shared. Upgrade to Pro for dedicated high-speed servers.")
+                    st.error(f"⚠️ {status}")
 
 with col_out:
     if 'current_pitch' in st.session_state:
         st.subheader("🔍 Intelligence")
         ci1, ci2, ci3 = st.columns(3)
-        with ci1: st.markdown(f"<div class='metric-card'><b>Industry</b><br>SaaS/Tech</div>", unsafe_allow_html=True)
-        with ci2: st.markdown(f"<div class='metric-card'><b>Pain Score</b><br>🔴 High</div>", unsafe_allow_html=True)
+        with ci1: st.markdown(f"<div class='metric-card'><b>Industry</b><br>Tech</div>", unsafe_allow_html=True)
+        with ci2: st.markdown(f"<div class='metric-card'><b>Pain</b><br>🔴 High</div>", unsafe_allow_html=True)
         with ci3: st.markdown(f"<div class='metric-card'><b>Status</b><br>{st.session_state.current_model}</div>", unsafe_allow_html=True)
         
-        st.markdown("---")
         st.code(st.session_state.current_pitch, language=None)
         
         pdf_bytes = create_pdf_data(st.session_state.current_company, st.session_state.current_pitch)
-        st.download_button("📄 Download PDF Report", pdf_bytes, f"pitch_report.pdf", "application/pdf")
-    else:
-        st.info("Your AI-generated pitch suite will appear here.")
+        st.download_button("📄 Download PDF Report", pdf_bytes, f"report.pdf", "application/pdf")
