@@ -32,12 +32,13 @@ keys_list = st.secrets.get("GEMINI_KEYS", [])
 # --- 3. HELPER FUNCTIONS ---
 def scrape_website(url):
     try:
-        headers = {'User-Agent': 'Mozilla/5.0'}
+        headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'}
         response = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(response.text, 'html.parser')
         for s in soup(["script", "style"]): s.extract()
         return " ".join(soup.get_text().split())[:3000]
-    except: return "No data found."
+    except Exception as e:
+        return f"Scrape Error: {str(e)}"
 
 def create_pdf_data(company, content):
     pdf = FPDF()
@@ -45,29 +46,34 @@ def create_pdf_data(company, content):
     pdf.set_font("Arial", size=12)
     pdf.cell(200, 10, f"SalesPilot AI Pitch Report: {company}", ln=True, align='C')
     pdf.ln(10)
-    # Remove non-latin characters for simple FPDF
     safe_text = content.encode('ascii', 'ignore').decode('ascii')
     pdf.multi_cell(0, 10, safe_text)
     return pdf.output(dest='S')
 
 def smart_generate(prompt):
-    for key in keys_list:
+    if not keys_list:
+        return None, "Error: No API keys found in Secrets."
+    
+    for i, key in enumerate(keys_list):
         try:
             genai.configure(api_key=key)
             model = genai.GenerativeModel('gemini-1.5-flash')
             response = model.generate_content(prompt)
-            return response.text, "Gemini 1.5 Flash"
+            return response.text, f"Slot {i+1} Active"
         except Exception as e:
-            if "429" in str(e): continue
-            else: return None, None
-    return None, None
+            error_msg = str(e)
+            if "429" in error_msg:
+                continue # Try next key
+            else:
+                return None, f"Key Error: {error_msg}"
+    return None, "All free slots exhausted (429). Google is limiting this IP."
 
 # --- 4. AUTH GATE ---
 if not st.session_state.user_email:
     st.title("🚀 SalesPilot AI")
     st.write("Generate winning B2B pitches in 10 seconds.")
     email = st.text_input("Work Email Address", placeholder="name@company.com")
-    if st.button("Start Free — No Credit Card"):
+    if st.button("Start Free"):
         if "@" in email:
             st.session_state.user_email = email
             st.rerun()
@@ -106,18 +112,17 @@ with col_in:
             with st.spinner('Scraping & Researching...'):
                 raw_data = scrape_website(c_url)
                 prompt = f"Company: {c_name} | Info: {raw_data} | Sell: {c_prod} | Tone: {c_tone}. Generate Cold Email, LinkedIn DM, WhatsApp, Elevator Pitch, and 3 Pain Points."
-                full_pitch, model_used = smart_generate(prompt)
+                full_pitch, model_status = smart_generate(prompt)
                 
                 if full_pitch:
                     st.session_state.pitch_count += 1
-                    st.session_state.current_model = str(model_used)
-                    st.session_state.current_company = str(c_name)
-                    st.session_state.current_pitch = str(full_pitch)
+                    st.session_state.current_model = model_status
+                    st.session_state.current_company = c_name
+                    st.session_state.current_pitch = full_pitch
                     st.session_state.history.append({'company': c_name})
                 else:
-                    time.sleep(10)
-                    st.info("🔄 Servers busy, retrying automatically...")
-                    full_pitch, model_used = smart_generate(prompt)
+                    st.error(f"⚠️ {model_status}")
+                    st.info("💡 Pro Tip: Our Free Tier is shared. Upgrade to Pro for dedicated high-speed servers.")
 
 with col_out:
     if 'current_pitch' in st.session_state:
@@ -125,7 +130,7 @@ with col_out:
         ci1, ci2, ci3 = st.columns(3)
         with ci1: st.markdown(f"<div class='metric-card'><b>Industry</b><br>SaaS/Tech</div>", unsafe_allow_html=True)
         with ci2: st.markdown(f"<div class='metric-card'><b>Pain Score</b><br>🔴 High</div>", unsafe_allow_html=True)
-        with ci3: st.markdown(f"<div class='metric-card'><b>Model</b><br>{st.session_state.current_model}</div>", unsafe_allow_html=True)
+        with ci3: st.markdown(f"<div class='metric-card'><b>Status</b><br>{st.session_state.current_model}</div>", unsafe_allow_html=True)
         
         st.markdown("---")
         st.code(st.session_state.current_pitch, language=None)
