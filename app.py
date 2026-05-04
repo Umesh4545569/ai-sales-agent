@@ -56,7 +56,7 @@ if st.session_state.pitch_count >= 3:
     st.title("⚡ Limit Reached")
     st.warning("You've used your 3 free daily pitches.")
     st.markdown("### Upgrade to Pro for unlimited leads & CRM export.")
-    st.link_button("🚀 Upgrade to SalesPilot Pro ($9/mo)", "https://stripe.com/your-link")
+    st.link_button("🚀 Upgrade to SalesPilot Pro ($9/mo)", "https://salespilotai.lemonsqueezy.com/checkout/buy/5a3cf1a7-0418-4e8b-b389-a1a57621f28d")
     st.stop()
 
 # --- 5. MAIN INTERFACE ---
