@@ -26,7 +26,7 @@ st.markdown("""
 if 'history' not in st.session_state: st.session_state.history = []
 if 'user_email' not in st.session_state: st.session_state.user_email = None
 if 'pitch_count' not in st.session_state: st.session_state.pitch_count = 0
-if 'current_model' not in st.session_state: st.session_state.current_model = "None"
+if 'current_model' not in st.session_state: str(st.session_state.current_model) = "None"
 keys_list = st.secrets.get("GEMINI_KEYS", [])
 
 # --- 3. HELPER FUNCTIONS ---
@@ -109,7 +109,7 @@ with col_in:
                 
                 if full_pitch:
                     st.session_state.pitch_count += 1
-                    st.session_state.current_model = model_used
+                    str(st.session_state.current_model) = model_used
                     st.session_state.current_company = company_name
                     st.session_state.current_pitch = full_pitch
                     st.session_state.history.append({'company': company_name})
@@ -122,7 +122,7 @@ with col_out:
         ci1, ci2, ci3 = st.columns(3)
         with ci1: st.markdown(f"<div class='metric-card'><b>Industry</b><br>SaaS/Tech</div>", unsafe_allow_html=True)
         with ci2: st.markdown(f"<div class='metric-card'><b>Pain Score</b><br>🔴 High</div>", unsafe_allow_html=True)
-        with ci3: st.markdown(f"<div class='metric-card'><b>Model</b><br>{st.session_state.current_model}</div>", unsafe_allow_html=True)
+        with ci3: st.markdown(f"<div class='metric-card'><b>Model</b><br>{str(st.session_state.current_model)}</div>", unsafe_allow_html=True)
         
         st.markdown("---")
         st.code(st.session_state.current_pitch, language=None)
