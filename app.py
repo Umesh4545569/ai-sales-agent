@@ -115,7 +115,9 @@ with col_in:
                     st.session_state.current_pitch = str(full_pitch)
                     st.session_state.history.append({'company': c_name})
                 else:
-                    st.error("⚠️ Servers Busy. Pro users get priority access.")
+                    time.sleep(10)
+                    st.info("🔄 Servers busy, retrying automatically...")
+                    full_pitch, model_used = smart_generate(prompt)
 
 with col_out:
     if 'current_pitch' in st.session_state:
