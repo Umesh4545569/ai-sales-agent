@@ -2,30 +2,24 @@ import streamlit as st
 import google.generativeai as genai
 import requests
 from bs4 import BeautifulSoup
-import time
+import random
 
-# --- 1. PRO UI THEME ---
+# --- 1. UI SETUP ---
 st.set_page_config(page_title="SalesPilot AI", page_icon="🚀", layout="wide")
-
 st.markdown("""
 <style>
     .main { background-color: #0a0a0a; color: #ffffff; }
-    .stTextInput>div>div>input, .stTextArea>div>div>textarea { background-color: #1a1a1a; color: white; border-radius: 8px; }
-    .normal-btn button { background-color: #4b5563 !important; color: white !important; border-radius: 8px !important; width: 100%; }
-    .pro-btn button { background: linear-gradient(90deg, #6366f1 0%, #a855f7 100%) !important; color: white !important; border-radius: 8px !important; width: 100%; font-weight: bold; }
-    .sub-btn a { 
-        background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%) !important; 
-        color: white !important; padding: 12px 20px; text-decoration: none; border-radius: 8px;
-        display: block; text-align: center; font-weight: bold; margin-top: 10px;
-    }
-    footer {visibility: hidden;}
+    .stButton>button { background: linear-gradient(90deg, #6366f1 0%, #a855f7 100%); color: white; border-radius: 8px; width: 100%; font-weight: bold; }
+    .sub-btn a { background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%) !important; color: white !important; padding: 12px 20px; text-decoration: none; border-radius: 8px; display: block; text-align: center; font-weight: bold; }
 </style>
 """, unsafe_allow_html=True)
 
+# --- 2. MULTI-KEY ROTATION LOGIC ---
+# Load the list of keys from secrets
+keys_list = st.secrets.get("GEMINI_KEYS", [])
+
 if 'pitch_count' not in st.session_state: st.session_state.pitch_count = 0
 if 'authenticated' not in st.session_state: st.session_state.authenticated = False
-
-api_key = st.secrets.get("GEMINI_API_KEY")
 
 def scrape_website(url):
     try:
@@ -36,6 +30,23 @@ def scrape_website(url):
         return " ".join(soup.get_text().split())[:3000]
     except: return None
 
+# --- 3. THE "UNLIMITED" GENERATOR FUNCTION ---
+def generate_with_rotation(prompt):
+    # Try every key in your list until one works
+    for key in keys_list:
+        try:
+            genai.configure(api_key=key)
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            response = model.generate_content(prompt)
+            return response.text, key # Success!
+        except Exception as e:
+            if "429" in str(e):
+                continue # Try the next key
+            else:
+                return f"Error: {e}", None
+    return "All API keys are currently exhausted. Please wait 60 seconds.", None
+
+# --- 4. APP INTERFACE ---
 if not st.session_state.authenticated:
     st.title("🚀 SalesPilot AI")
     email = st.text_input("Enter business email to start")
@@ -46,55 +57,39 @@ if not st.session_state.authenticated:
     st.stop()
 
 st.title("🚀 SalesPilot AI")
-st.caption(f"Free Credits Used: {st.session_state.pitch_count}/3")
+st.caption(f"Status: High-Volume Engine Active | Credits Used: {st.session_state.pitch_count}/3")
 
 col1, col2 = st.columns([1, 1.5])
 
 with col1:
-    st.markdown("### Target Input")
     company = st.text_input("Company Name")
     url = st.text_input("Website URL")
     service = st.text_area("What are you selling?")
     
-    st.markdown('<div class="normal-btn">', unsafe_allow_html=True)
-    normal_gen = st.button("Generate Normal Pitch (Free)")
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    st.markdown('<div class="pro-btn">', unsafe_allow_html=True)
+    st.markdown("---")
     pro_gen = st.button("✨ Generate Full Pro Suite")
-    st.markdown('</div>', unsafe_allow_html=True)
-    
     st.markdown(f'<a href="https://salespilotai.lemonsqueezy.com/checkout/buy/5a3cf1a7-0418-4e8b-b389-a1a57621f28d" class="sub-btn">💳 Subscribe to Unlimited Pro ($9/mo)</a>', unsafe_allow_html=True)
 
 with col2:
-    if st.session_state.pitch_count >= 3 and (normal_gen or pro_gen):
-        st.error("⚡ Free limit reached. Upgrade to Pro for unlimited high-speed access.")
+    if st.session_state.pitch_count >= 3 and pro_gen:
+        st.error("Free limit reached. Upgrade to Pro for business use.")
         st.stop()
 
-    if normal_gen or pro_gen:
+    if pro_gen:
         if not company or not url:
-            st.error("Missing company info.")
+            st.error("Missing details.")
         else:
-            with st.spinner('AI is analyzing...'):
-                try:
-                    genai.configure(api_key=api_key)
-                    models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-                    model_name = next((m for m in models if "1.5-flash" in m), models[0])
+            with st.spinner('Rotating keys and researching...'):
+                data = scrape_website(url)
+                if data:
+                    prompt = f"Analyze: {data}. Write a 3-sentence sales email and LinkedIn DM for {company} selling {service}."
+                    result, used_key = generate_with_rotation(prompt)
                     
-                    data = scrape_website(url)
-                    if data:
-                        prompt = f"Write a sales pitch for {company} selling {service} based on {data}."
-                        model = genai.GenerativeModel(model_name)
-                        response = model.generate_content(prompt)
+                    if used_key:
                         st.session_state.pitch_count += 1
-                        st.success(f"✅ Success!")
-                        st.write(response.text)
+                        st.success("✅ Success!")
+                        st.write(result)
                     else:
-                        st.error("Could not read website.")
-                except Exception as e:
-                    if "429" in str(e):
-                        st.warning("⚠️ Google's Free Tier is busy. Retrying in 15 seconds...")
-                        time.sleep(15)
-                        st.info("Please click the button again now.")
-                    else:
-                        st.error(f"Error: {e}")
+                        st.warning(result) # Show the exhausted message
+                else:
+                    st.error("Scrape failed.")
