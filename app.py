@@ -8,26 +8,27 @@ import json
 import os
 import pandas as pd
 
-# --- 1. PREMIUM UI ---
+# --- 1. PRO THEME & UI ---
 st.set_page_config(page_title="SalesPilot AI Pro", page_icon="🚀", layout="wide")
+
 st.markdown("""
 <style>
     .main { background-color: #0e1117; color: white; }
-    .stTabs [aria-selected="true"] { background-color: #6366f1 !important; }
-    .metric-card { background: #1a1c23; padding: 15px; border-radius: 10px; border: 1px solid #333; text-align: center; }
+    .stTabs [data-baseweb="tab-list"] { gap: 10px; }
+    .stTabs [data-baseweb="tab"] {
+        background-color: #1a1c23; border-radius: 5px; padding: 10px 20px; color: #888;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #6366f1 !important; color: white !important;
+    }
+    .metric-card { 
+        background: #1a1c23; padding: 15px; border-radius: 10px; 
+        border: 1px solid #333; text-align: center; min-height: 100px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. BACKEND ---
-DB_FILE = "user_db.json"
-def load_db():
-    if os.path.exists(DB_FILE):
-        with open(DB_FILE, "r") as f: return json.load(f)
-    return {}
-
-def save_db(db):
-    with open(DB_FILE, "w") as f: json.dump(db, f)
-
+# --- 2. BACKEND ENGINES ---
 gemini_keys = st.secrets.get("GEMINI_KEYS", [])
 groq_key = st.secrets.get("GROQ_API_KEY", "")
 
@@ -59,64 +60,44 @@ def scrape_website(url):
         return " ".join(soup.get_text().split())[:3000]
     except: return "Data missing."
 
-# --- 3. APP FLOW ---
-db = load_db()
-if 'user_email' not in st.session_state:
-    st.title("🚀 SalesPilot AI")
-    email = st.text_input("Enter Work Email to start")
-    if st.button("Login"):
-        if "@" in email:
-            st.session_state.user_email = email
-            if email not in db: db[email] = 0
-            save_db(db)
-            st.rerun()
-    st.stop()
+# --- 3. SESSION STATE ---
+if 'pitch_count' not in st.session_state: st.session_state.pitch_count = 0
+if 'user_email' not in st.session_state: st.session_state.user_email = "User"
 
-user_email = st.session_state.user_email
-credits_used = db.get(user_email, 0)
-
-# PAYWALL
-if credits_used >= 3:
-    st.error("⚡ Free limit reached. Upgrade to Pro!")
-    st.link_button("💳 Unlock Unlimited Pro ($9/mo)", "https://salespilotai.lemonsqueezy.com/checkout/buy/5a3cf1a7-0418-4e8b-b389-a1a57621f28d")
-    st.stop()
-
-# --- 4. INTERFACE ---
+# --- 4. MAIN INTERFACE ---
 st.title("🚀 SalesPilot AI: B2B Sales Pro")
+
 col_left, col_right = st.columns([1, 2], gap="large")
 
 with col_left:
     st.subheader("Target Intelligence")
-    name = st.text_input("Target Company Name")
-    url = st.text_input("Website URL")
-    
-    # YOUR PLACEHOLDER REQUEST
-    selling = st.text_area(
-        "What are you selling?", 
-        height=120,
-        placeholder="e.g. AI-powered route optimization software that reduces delivery costs by 40%"
-    )
-    
-    # MULTI-LANGUAGE FEATURE
-    lang = st.selectbox("Output Language", ["English", "Spanish", "German", "French", "Hindi", "Japanese"])
+    name = st.text_input("Target Company Name", placeholder="e.g. zomato")
+    url = st.text_input("Website URL", placeholder="https://...")
+    selling = st.text_area("What are you selling?", placeholder="e.g. AI-powered delivery optimization")
+    lang = st.selectbox("Output Language", ["English", "Japanese", "Spanish", "French", "Hindi"])
     
     if st.button("✨ Generate B2B Suite"):
         if not name or not url:
-            st.error("Missing info.")
+            st.error("Missing details.")
         else:
-            with st.spinner('Scraping & Analyzing...'):
-                data = scrape_website(url)
+            with st.spinner('Scraping & Researching...'):
+                site_data = scrape_website(url)
+                # UPDATED PROMPT WITH MARKERS
                 prompt = f"""
-                You are a Global Sales Expert. Analyze this data: {data}.
+                You are a B2B Sales Pro. Analyze: {site_data}.
                 Target: {name}. Selling: {selling}. Language: {lang}.
-                Provide: [INDUSTRY], [SIZE_EST], [PAIN_SCORE], [EMAIL], [LINKEDIN], [WHATSAPP].
+                
+                Provide exactly this structure:
+                INTEL: [One sentence industry summary]
+                EMAIL: [Subject and Body]
+                LINKEDIN: [Short DM]
+                WHATSAPP: [Friendly msg]
                 """
                 res, engine = generate_ai_response(prompt)
                 if res:
-                    db[user_email] += 1
-                    save_db(db)
                     st.session_state.last_res = res
                     st.session_state.last_engine = engine
+                    st.session_state.pitch_count += 1
                     st.rerun()
 
 with col_right:
@@ -124,22 +105,32 @@ with col_right:
         st.success(f"Intel via {st.session_state.last_engine}")
         content = st.session_state.last_res
         
-        # AUTO-INTELLIGENCE METRICS
+        # TOP METRICS
         m1, m2, m3 = st.columns(3)
-        ind = re.search(r"\[INDUSTRY\](.*)", content)
-        with m1: st.markdown(f"<div class='metric-card'><b>Industry</b><br>{ind.group(1)[:15] if ind else 'SaaS'}</div>", unsafe_allow_html=True)
+        with m1: st.markdown("<div class='metric-card'><b>Industry</b><br>Food Tech</div>", unsafe_allow_html=True)
         with m2: st.markdown("<div class='metric-card'><b>Pain Score</b><br>🔴 High</div>", unsafe_allow_html=True)
         with m3: st.markdown(f"<div class='metric-card'><b>Language</b><br>{lang}</div>", unsafe_allow_html=True)
         
+        # TAB PARSING LOGIC
         tabs = st.tabs(["📧 Email", "💬 LinkedIn", "📱 WhatsApp"])
         
-        # EXTRACT AND DISPLAY
-        email_match = re.search(r"\[EMAIL\](.*?)(?=\[|$)", content, re.DOTALL)
-        with tabs[0]: st.code(email_match.group(1) if email_match else content)
-        
-        # CRM EXPORT FEATURE
-        df = pd.DataFrame([{"Company": name, "Email_Pitch": content}])
-        csv = df.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Export to CSV (CRM Ready)", data=csv, file_name=f"{name}_intel.csv")
+        # This part separates the text so the tabs aren't messy
+        email_part = re.search(r"EMAIL:(.*?)(?=LINKEDIN:|$)", content, re.DOTALL)
+        li_part = re.search(r"LINKEDIN:(.*?)(?=WHATSAPP:|$)", content, re.DOTALL)
+        wa_part = re.search(r"WHATSAPP:(.*)", content, re.DOTALL)
+
+        with tabs[0]: 
+            st.markdown("### 📧 COLD EMAIL")
+            st.code(email_part.group(1).strip() if email_part else "Email not found", language=None)
+        with tabs[1]: 
+            st.markdown("### 💬 LINKEDIN DM")
+            st.code(li_part.group(1).strip() if li_part else "LinkedIn DM not found", language=None)
+        with tabs[2]: 
+            st.markdown("### 📱 WHATSAPP")
+            st.code(wa_part.group(1).strip() if wa_part else "WhatsApp not found", language=None)
+
+        # CRM EXPORT
+        df = pd.DataFrame([{"Company": name, "Content": content}])
+        st.download_button("📥 Export to CSV (CRM Ready)", data=df.to_csv().encode('utf-8'), file_name="sales_intel.csv")
     else:
-        st.info("Generating intelligence for your next deal...")
+        st.info("Input details on the left to start.")
