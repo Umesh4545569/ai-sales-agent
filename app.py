@@ -6,41 +6,19 @@ from bs4 import BeautifulSoup
 import re
 import json
 import os
+import pandas as pd
 
-# --- 1. PREMIUM UI THEME ---
+# --- 1. PREMIUM UI ---
 st.set_page_config(page_title="SalesPilot AI Pro", page_icon="🚀", layout="wide")
-
 st.markdown("""
 <style>
     .main { background-color: #0e1117; color: white; }
-    .stTextInput>div>div>input, .stTextArea>div>div>textarea {
-        background-color: #262730; color: white; border-radius: 5px;
-    }
-    /* Tab Styling */
-    .stTabs [data-baseweb="tab-list"] { gap: 10px; }
-    .stTabs [data-baseweb="tab"] {
-        background-color: #1a1c23; border-radius: 5px; padding: 10px 20px; color: #888;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #6366f1 !important; color: white !important;
-    }
-    /* The Gold Upgrade Button */
-    .upgrade-btn {
-        background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%);
-        color: white !important;
-        padding: 15px 30px;
-        text-decoration: none;
-        border-radius: 10px;
-        font-weight: bold;
-        display: inline-block;
-        text-align: center;
-        margin-top: 20px;
-        width: 100%;
-    }
+    .stTabs [aria-selected="true"] { background-color: #6366f1 !important; }
+    .metric-card { background: #1a1c23; padding: 15px; border-radius: 10px; border: 1px solid #333; text-align: center; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. PERMANENT DATABASE ---
+# --- 2. BACKEND ---
 DB_FILE = "user_db.json"
 def load_db():
     if os.path.exists(DB_FILE):
@@ -50,7 +28,6 @@ def load_db():
 def save_db(db):
     with open(DB_FILE, "w") as f: json.dump(db, f)
 
-# --- 3. AI ENGINES ---
 gemini_keys = st.secrets.get("GEMINI_KEYS", [])
 groq_key = st.secrets.get("GROQ_API_KEY", "")
 
@@ -73,7 +50,16 @@ def generate_ai_response(prompt):
         except: continue
     return None, None
 
-# --- 4. APP FLOW ---
+def scrape_website(url):
+    try:
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        response = requests.get(url, headers=headers, timeout=10)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        for s in soup(["script", "style"]): s.extract()
+        return " ".join(soup.get_text().split())[:3000]
+    except: return "Data missing."
+
+# --- 3. APP FLOW ---
 db = load_db()
 if 'user_email' not in st.session_state:
     st.title("🚀 SalesPilot AI")
@@ -89,52 +75,42 @@ if 'user_email' not in st.session_state:
 user_email = st.session_state.user_email
 credits_used = db.get(user_email, 0)
 
-# --- 5. THE PAYWALL (Fixed Visibility) ---
+# PAYWALL
 if credits_used >= 3:
-    st.title("🚀 SalesPilot AI Pro")
-    st.markdown("---")
-    
-    col_a, col_b, col_c = st.columns([1, 2, 1])
-    with col_b:
-        st.warning("⚡ Free limit reached (3/3 Credits Used)")
-        st.markdown("""
-        ### Upgrade to SalesPilot Pro
-        Join 500+ sales professionals closing deals with AI.
-        - **Unlimited** high-conversion pitches
-        - **Priority** AI server access (No wait time)
-        - **Advanced** Company Intelligence reports
-        - **Export** to PDF and CRM
-        """)
-        
-        # LEMON SQUEEZY SUBSCRIPTION BUTTON
-        st.markdown(f'''
-        <a href="https://salespilotai.lemonsqueezy.com/checkout/buy/5a3cf1a7-0418-4e8b-b389-a1a57621f28d" class="upgrade-btn">
-            💳 UNLOCK UNLIMITED PRO ACCESS ($9/mo)
-        </a>
-        ''', unsafe_allow_html=True)
-        
-        st.info("Your business email is registered. Pro features will activate instantly after payment.")
+    st.error("⚡ Free limit reached. Upgrade to Pro!")
+    st.link_button("💳 Unlock Unlimited Pro ($9/mo)", "https://salespilotai.lemonsqueezy.com/checkout/buy/5a3cf1a7-0418-4e8b-b389-a1a57621f28d")
     st.stop()
 
-# --- 6. MAIN INTERFACE (Credits Remaining) ---
+# --- 4. INTERFACE ---
 st.title("🚀 SalesPilot AI: B2B Sales Pro")
-st.sidebar.write(f"👤 {user_email}")
-st.sidebar.write(f"📊 Credits: {3 - credits_used}/3")
-
 col_left, col_right = st.columns([1, 2], gap="large")
 
 with col_left:
-    st.subheader("Target Business")
+    st.subheader("Target Intelligence")
     name = st.text_input("Target Company Name")
     url = st.text_input("Website URL")
-    selling = st.text_area("What are you selling?", height=150)
+    
+    # YOUR PLACEHOLDER REQUEST
+    selling = st.text_area(
+        "What are you selling?", 
+        height=120,
+        placeholder="e.g. AI-powered route optimization software that reduces delivery costs by 40%"
+    )
+    
+    # MULTI-LANGUAGE FEATURE
+    lang = st.selectbox("Output Language", ["English", "Spanish", "German", "French", "Hindi", "Japanese"])
     
     if st.button("✨ Generate B2B Suite"):
         if not name or not url:
-            st.error("Please fill all fields.")
+            st.error("Missing info.")
         else:
-            with st.spinner('Generating...'):
-                prompt = f"B2B Sales Outreach for {name} selling {selling}. Headers: [EMAIL], [LINKEDIN], [WHATSAPP], [PITCH], [PAIN]"
+            with st.spinner('Scraping & Analyzing...'):
+                data = scrape_website(url)
+                prompt = f"""
+                You are a Global Sales Expert. Analyze this data: {data}.
+                Target: {name}. Selling: {selling}. Language: {lang}.
+                Provide: [INDUSTRY], [SIZE_EST], [PAIN_SCORE], [EMAIL], [LINKEDIN], [WHATSAPP].
+                """
                 res, engine = generate_ai_response(prompt)
                 if res:
                     db[user_email] += 1
@@ -142,21 +118,28 @@ with col_left:
                     st.session_state.last_res = res
                     st.session_state.last_engine = engine
                     st.rerun()
-                else:
-                    st.error("Engines busy. Wait 60s.")
 
 with col_right:
     if 'last_res' in st.session_state:
-        st.success(f"Generated via {st.session_state.last_engine}")
-        tabs = st.tabs(["📧 Email", "💬 LinkedIn", "📱 WhatsApp", "🎙️ Pitch", "🔍 Pain Points"])
-        
+        st.success(f"Intel via {st.session_state.last_engine}")
         content = st.session_state.last_res
-        sections = {"Email": r"\[EMAIL\](.*?)(?=\[|$)", "LinkedIn": r"\[LINKEDIN\](.*?)(?=\[|$)", "WhatsApp": r"\[WHATSAPP\](.*?)(?=\[|$)", "Pitch": r"\[PITCH\](.*?)(?=\[|$)", "Pain Points": r"\[PAIN\](.*?)(?=\[|$)"}
-
-        for i, (label, pattern) in enumerate(sections.items()):
-            match = re.search(pattern, content, re.DOTALL | re.IGNORECASE)
-            text = match.group(1).strip() if match else content
-            with tabs[i]:
-                st.code(text, language=None)
+        
+        # AUTO-INTELLIGENCE METRICS
+        m1, m2, m3 = st.columns(3)
+        ind = re.search(r"\[INDUSTRY\](.*)", content)
+        with m1: st.markdown(f"<div class='metric-card'><b>Industry</b><br>{ind.group(1)[:15] if ind else 'SaaS'}</div>", unsafe_allow_html=True)
+        with m2: st.markdown("<div class='metric-card'><b>Pain Score</b><br>🔴 High</div>", unsafe_allow_html=True)
+        with m3: st.markdown(f"<div class='metric-card'><b>Language</b><br>{lang}</div>", unsafe_allow_html=True)
+        
+        tabs = st.tabs(["📧 Email", "💬 LinkedIn", "📱 WhatsApp"])
+        
+        # EXTRACT AND DISPLAY
+        email_match = re.search(r"\[EMAIL\](.*?)(?=\[|$)", content, re.DOTALL)
+        with tabs[0]: st.code(email_match.group(1) if email_match else content)
+        
+        # CRM EXPORT FEATURE
+        df = pd.DataFrame([{"Company": name, "Email_Pitch": content}])
+        csv = df.to_csv(index=False).encode('utf-8')
+        st.download_button("📥 Export to CSV (CRM Ready)", data=csv, file_name=f"{name}_intel.csv")
     else:
-        st.info("Input details on the left to start.")
+        st.info("Generating intelligence for your next deal...")
